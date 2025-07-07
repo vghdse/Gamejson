@@ -50,6 +50,8 @@ const Crypto = require('crypto')
 const path = require('path')
 const prefix = config.PREFIX
 const { Octokit } = require('@octokit/rest');
+//const axios = require('axios');
+const FormData = require('form-data');
 
 // const { commands } = require('./command');
 const ownerNumber = ['263719647303']
@@ -206,7 +208,7 @@ async function loadSession() {
         return null;
     }
 } */
-
+/*
 const sessionDir = path.join(__dirname, 'sessions');
 const credsPath = path.join(sessionDir, 'creds.json');
 
@@ -358,7 +360,110 @@ async function loadSession() {
     }
 }
 
+*/
+const sessionDir = path.join(__dirname, 'sessions');
+const credsPath = path.join(sessionDir, 'creds.json');
 
+// Create session directory if it doesn't exist
+if (!fs.existsSync(sessionDir)) {
+    fs.mkdirSync(sessionDir, { recursive: true });
+}
+
+// PixelDrain configuration
+const PIXELDRAIN_API_KEY = '15a72bb5-93b4-4452-9166-000bb9aa82d2';
+const PIXELDRAIN_API_URL = 'https://pixeldrain.com/api';
+
+async function loadSession() {
+    try {
+        if (!config.SESSION_ID) {
+            console.log('No SESSION_ID provided - please add one!');
+            return null;
+        }
+
+        console.log('[⏳] Attempting to load session...');
+
+        // PixelDrain Session Loader
+        if (config.SESSION_ID.startsWith('SUBZERO~')) {
+            console.log('[☁️] Detected PixelDrain session storage');
+            const fileId = config.SESSION_ID.replace("SUBZERO~", "");
+
+            try {
+                const response = await axios.get(`${PIXELDRAIN_API_URL}/file/${fileId}`, {
+                    responseType: 'arraybuffer',
+                    headers: {
+                        'Authorization': `Basic ${Buffer.from(`:${PIXELDRAIN_API_KEY}`).toString('base64')}`
+                    }
+                });
+
+                const content = response.data.toString('utf8');
+                await fs.promises.writeFile(credsPath, content);
+                console.log('[✅] Session downloaded successfully from PixelDrain');
+                return JSON.parse(content);
+            } catch (error) {
+                console.error('[❌] PixelDrain session error:', error.message);
+                throw error;
+            }
+        }
+        // Mongo Session Loader (kept for compatibility)
+        else if (config.SESSION_ID.startsWith('SUBZERO-MD~')) {
+            console.log('[🗄️] Detected Mongo session storage');
+            try {
+                const response = await axios.get(
+                    'https://subzero-md.koyeb.app/api/downloadCreds.php/' + config.SESSION_ID, {
+                        headers: { 'x-api-key': 'subzero-md' }
+                    }
+                );
+
+                if (!response.data.credsData) {
+                    throw new Error('No credential data received from Mongo server');
+                }
+
+                await fs.promises.writeFile(credsPath, JSON.stringify(response.data.credsData), 'utf8');
+                console.log('[✅] Mongo session downloaded successfully');
+                return response.data.credsData;
+            } catch (error) {
+                console.error('[❌] Mongo session error:', error.message);
+                throw error;
+            }
+        }
+        else {
+            console.error('❌ Invalid Session ID format');
+            return null;
+        }
+    } catch (error) {
+        console.error('❌ Error loading session:', error.message);
+        console.log('⚠️ Will generate QR code instead');
+        return null;
+    }
+}
+
+//=========SESSION-UPLOAD=====================
+async function uploadSession(credsPath) {
+    try {
+        if (!fs.existsSync(credsPath)) {
+            throw new Error('Session file not found');
+        }
+
+        const formData = new FormData();
+        formData.append('file', fs.createReadStream(credsPath), 'session.json');
+
+        const response = await axios.post(`${PIXELDRAIN_API_URL}/file`, formData, {
+            headers: {
+                'Authorization': `Basic ${Buffer.from(`:${PIXELDRAIN_API_KEY}`).toString('base64')}`,
+                ...formData.getHeaders()
+            }
+        });
+
+        if (!response.data.success) {
+            throw new Error('Upload failed');
+        }
+
+        return `SUBZERO~${response.data.id}`;
+    } catch (error) {
+        console.error('Upload error:', error);
+        throw error;
+    }
+}
 //=========SESSION-AUTH=====================
 
 
