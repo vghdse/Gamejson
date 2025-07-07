@@ -363,6 +363,102 @@ async function loadSession() {
 */
 const sessionDir = path.join(__dirname, 'sessions');
 const credsPath = path.join(sessionDir, 'creds.json');
+const axios = require('axios');
+
+// Create session directory if it doesn't exist
+if (!fs.existsSync(sessionDir)) {
+    fs.mkdirSync(sessionDir, { recursive: true });
+}
+
+// PixelDrain configuration
+const PIXELDRAIN_API_KEY = '15a72bb5-93b4-4452-9166-000bb9aa82d2';
+const PIXELDRAIN_API_URL = 'https://pixeldrain.com/api';
+
+async function loadSession() {
+    try {
+        if (!config.SESSION_ID) {
+            console.log('No SESSION_ID provided - please add one!');
+            return null;
+        }
+
+        console.log('[⏳] Attempting to load session...');
+
+        // PixelDrain Session Loader
+        if (config.SESSION_ID.startsWith('SUBZERO~')) {
+            console.log('[☁️] Detected PixelDrain session storage');
+            const fileId = config.SESSION_ID.replace("SUBZERO~", "");
+
+            try {
+                // First verify the file exists
+                const infoResponse = await axios.get(`${PIXELDRAIN_API_URL}/file/${fileId}/info`, {
+                    headers: {
+                        'Authorization': `Basic ${Buffer.from(`:${PIXELDRAIN_API_KEY}`).toString('base64')}`
+                    }
+                });
+
+                if (!infoResponse.data.success) {
+                    throw new Error('File not found on PixelDrain');
+                }
+
+                // Download the session file
+                const downloadResponse = await axios.get(`${PIXELDRAIN_API_URL}/file/${fileId}`, {
+                    responseType: 'arraybuffer',
+                    headers: {
+                        'Authorization': `Basic ${Buffer.from(`:${PIXELDRAIN_API_KEY}`).toString('base64')}`
+                    }
+                });
+
+                const content = downloadResponse.data.toString('utf8');
+                fs.writeFileSync(credsPath, content);
+                console.log('[✅] Session downloaded successfully from PixelDrain');
+
+                // Basic validation
+                const sessionData = JSON.parse(content);
+                if (!sessionData.creds || !sessionData.keys) {
+                    throw new Error('Downloaded file is not a valid session');
+                }
+
+                return sessionData;
+            } catch (error) {
+                console.error('[❌] PixelDrain session error:', error.response?.data || error.message);
+                throw new Error('Failed to load session from PixelDrain');
+            }
+        }
+        // Mongo Session Loader (fallback)
+        else if (config.SESSION_ID.startsWith('SUBZERO-MD~')) {
+            console.log('[🗄️] Detected Mongo session storage');
+            try {
+                const response = await axios.get(
+                    'https://subzero-md.koyeb.app/api/downloadCreds.php/' + config.SESSION_ID, {
+                        headers: { 'x-api-key': 'subzero-md' }
+                    }
+                );
+
+                if (!response.data.credsData) {
+                    throw new Error('No credential data received from Mongo server');
+                }
+
+                fs.writeFileSync(credsPath, JSON.stringify(response.data.credsData), 'utf8');
+                console.log('[✅] Mongo session downloaded successfully');
+                return response.data.credsData;
+            } catch (error) {
+                console.error('[❌] Mongo session error:', error.message);
+                throw error;
+            }
+        }
+        else {
+            console.error('❌ Invalid Session ID format');
+            return null;
+        }
+    } catch (error) {
+        console.error('❌ Error loading session:', error.message);
+        console.log('⚠️ Will generate QR code instead');
+        return null;
+    }
+}
+/*
+const sessionDir = path.join(__dirname, 'sessions');
+const credsPath = path.join(sessionDir, 'creds.json');
 
 // Create session directory if it doesn't exist
 if (!fs.existsSync(sessionDir)) {
@@ -464,6 +560,7 @@ async function uploadSession(credsPath) {
         throw error;
     }
 }
+*/
 //=========SESSION-AUTH=====================
 
 
