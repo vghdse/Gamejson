@@ -363,7 +363,7 @@ async function loadSession() {
 */
 const sessionDir = path.join(__dirname, 'sessions');
 const credsPath = path.join(sessionDir, 'creds.json');
-const axios = require('axios');
+//const axios = require('axios');
 
 // Create session directory if it doesn't exist
 if (!fs.existsSync(sessionDir)) {
