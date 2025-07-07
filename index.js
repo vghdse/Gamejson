@@ -361,6 +361,48 @@ async function loadSession() {
 }
 
 */
+
+const sessionDir = path.join(__dirname, 'sessions');
+const credsPath = path.join(sessionDir, 'creds.json');
+
+if (!fs.existsSync(sessionDir)) {
+    fs.mkdirSync(sessionDir, { recursive: true });
+}
+
+const PIXELDRAIN_API_KEY = '15a72bb5-93b4-4452-9166-000bb9aa82d2';
+
+async function loadSession() {
+    if (!config.SESSION_ID) {
+        console.log('❌ No SESSION_ID provided');
+        return null;
+    }
+
+    if (!config.SESSION_ID.startsWith('SUBZERO~')) {
+        console.log('❌ Invalid SESSION_ID format');
+        return null;
+    }
+
+    const fileId = config.SESSION_ID.replace("SUBZERO~", "");
+    
+    try {
+        const response = await axios.get(`https://pixeldrain.com/api/file/${fileId}`, {
+            responseType: 'arraybuffer',
+            headers: {
+                'Authorization': `Basic ${Buffer.from(`:${PIXELDRAIN_API_KEY}`).toString('base64')}`
+            }
+        });
+
+        fs.writeFileSync(credsPath, response.data);
+        console.log('✅ Session loaded from PixelDrain');
+        return JSON.parse(response.data.toString());
+    } catch (error) {
+        console.log('❌ Failed to load session:', error.message);
+        return null;
+    }
+}
+
+module.exports = { loadSession };
+/*
 const sessionDir = path.join(__dirname, 'sessions');
 const credsPath = path.join(sessionDir, 'creds.json');
 //const axios = require('axios');
@@ -456,6 +498,7 @@ async function loadSession() {
         return null;
     }
 }
+*/
 /*
 const sessionDir = path.join(__dirname, 'sessions');
 const credsPath = path.join(sessionDir, 'creds.json');
